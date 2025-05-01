@@ -15,6 +15,8 @@
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/adc.h"
+#include "image_buffer.h"
+#include "classify.h"
 
 // Attached to resistive touchscreen
 // #define XMINUS 6
@@ -26,6 +28,9 @@
 #define YPLUS 7
 #define XPLUS 6
 #define YMINUS 9
+#define STATE_BUTTON 15
+#define DRAW_BUTTON 14
+#define BUTTON_COOLDOWN 20000
 
 // Setup for reading the y coordinate
 // Y+ and Y- set to input (high impedance)
@@ -61,7 +66,8 @@ void setupX(void) {
 
 }
 
-static uint8_t img[28][28] = {0};
+volatile uint8_t img[28][28] = {0};
+volatile bool    frame_ready = false;    
 
 // Selects between measuring x/y coord
 volatile int chooser;
@@ -86,6 +92,77 @@ int iy ;
 // Pointer to index in sample buffer
 unsigned char xpointer = 0 ;
 unsigned char ypointer = 0 ;
+
+// Single-core state machine
+typedef enum { DRAWING, CLASSIFY } AppState;
+volatile AppState app_state = DRAWING;
+
+typedef enum { NODRAW, DRAW } DrawState;
+volatile DrawState draw_state = NODRAW;
+
+static volatile uint32_t last_app_press = 0;
+static volatile uint32_t last_draw_press = 0;
+
+static void button_irq_handler(uint gpio, uint32_t events)
+{
+    uint32_t now = time_us_32();
+
+    if (gpio == STATE_BUTTON) {
+        if (now - last_app_press > BUTTON_COOLDOWN) {
+            last_app_press = now;
+            app_state = (app_state == DRAWING) ? CLASSIFY : DRAWING;
+        }
+    }
+    if (gpio == DRAW_BUTTON) {
+        if (now - last_draw_press > BUTTON_COOLDOWN) {
+            last_draw_press = now;
+            draw_state = (draw_state == NODRAW) ? DRAW : NODRAW;
+        }
+    }
+}
+
+
+// uint32_t last_app_button_time = 0;
+// uint32_t last_draw_button_time = 0;
+
+// bool debounce_app_state_button() {
+//     if (gpio_get(STATE_BUTTON) == 0) {  
+//       uint32_t current_time = time_us_32();
+//       if (current_time - last_app_button_time > BUTTON_COOLDOWN*5){
+//         if (gpio_get(STATE_BUTTON) == 0) {  
+//           last_app_button_time = current_time;
+//           return true;
+//         }
+//       }
+//     }
+//     return false;
+// }
+  
+// //Function to update the state machine
+// void update_app_state() {
+//     if (debounce_app_state_button()) {
+//         app_state = (app_state == DRAWING) ? CLASSIFY : DRAWING;
+//     }
+// }
+
+// bool debounce_draw_state_button() {
+//     if (gpio_get(DRAW_BUTTON) == 0) {  
+//       uint32_t current_time = time_us_32();
+//       if (current_time - last_draw_button_time > BUTTON_COOLDOWN*5){
+//         if (gpio_get(DRAW_BUTTON) == 0) {  
+//           last_draw_button_time = current_time;
+//           return true;
+//         }
+//       }
+//     }
+//     return false;
+// }
+
+// void update_draw_state() {
+//     if (debounce_draw_state_button()) {
+//         draw_state = (draw_state == NODRAW) ? DRAW : NODRAW;
+//     }
+// }
 
 // Timer ISR
 bool repeating_timer_callback(struct repeating_timer *t) {
@@ -139,6 +216,40 @@ bool repeating_timer_callback(struct repeating_timer *t) {
     }
 }
 
+void read_touchpad() {
+    if ((xret < 2200) && (xret > 1600) && (yret < 3400) && (yret > 450)) {
+        // map into [0..27]
+        int ix = 28 - (((xret - 1600) * 28) / (2200 - 1600));
+        if (ix < 0)   ix = 0;
+        if (ix > 27)  ix = 27;
+        int iy =      ((yret - 450) * 28) / (3400 - 450);
+        if (iy < 0)   iy = 0;
+        if (iy > 27)  iy = 27;
+    
+        printf("%d, %d\t", ix, iy);
+    
+        // draw a 2x2 square centered at (ix,iy)
+        for (int dy = 0; dy <= 1; dy++) {
+            int y = iy + dy;
+            if (y < 0 || y >= 28) continue;
+            for (int dx = 0; dx <= 1; dx++) {
+                int x = ix + dx;
+                if (x < 0 || x >= 28) continue;
+                if (dx == 0 && dy == 0) { img[y][x] = 255; } 
+                else if (img[y][x] != 255) { img[y][x] = 255; }
+            }
+        }
+    }
+    printf("ARRAY\n");
+    for (int i = 0; i < 28; i++) {
+        for (int j = 0; j < 28; j++) {
+            printf("%d ", img[i][j]);
+        }
+        printf("\n");
+    }
+    printf("\n");
+}
+
 
 int main() {
 
@@ -151,6 +262,12 @@ int main() {
     gpio_init(26); // X+ (ADC input)
     gpio_set_dir(26, GPIO_IN);
     gpio_disable_pulls(26); // Important!
+    gpio_init(STATE_BUTTON);
+    gpio_set_dir(STATE_BUTTON, GPIO_IN);
+    gpio_pull_up(STATE_BUTTON);
+    gpio_init(DRAW_BUTTON);
+    gpio_set_dir(DRAW_BUTTON, GPIO_IN);
+    gpio_pull_up(DRAW_BUTTON);
     adc_gpio_init(26);  
     adc_gpio_init(27);
 
@@ -170,51 +287,28 @@ int main() {
     // 25us (40kHz) later regardless of how long the callback took to execute
     add_repeating_timer_us(-4000, repeating_timer_callback, NULL, &timer);
 
+    gpio_set_irq_enabled_with_callback(STATE_BUTTON, GPIO_IRQ_EDGE_FALL, true, &button_irq_handler);
+
+    gpio_set_irq_enabled(DRAW_BUTTON, GPIO_IRQ_EDGE_FALL, true);
+
+    cnn_setup();
+
     while(1) {
-        //printf("x = %d, y = %d\n", adc_x_raw, adc_y_raw);
-        // if ((xret<2200) && (xret>1600) && (yret<3400) && (yret>450)) {
-        //     ix = 28 - (((xret - 1600) * 28) / (2200 - 1600));
-        //     if (ix < 0)   ix = 0;
-        //     if (ix > 27)  ix = 27;
-        //     iy =      ((yret - 450) * 28) / (3400 - 450);
-        //     if (iy < 0)   iy = 0;
-        //     if (iy > 27)  iy = 27;
-        //     printf("%d, %d\t", ix, iy);
-        //     img[iy][ix] = 1;
-        // }
-
-        if ((xret < 2200) && (xret > 1600) && (yret < 3400) && (yret > 450)) {
-            // map into [0..27]
-            int ix = 28 - (((xret - 1600) * 28) / (2200 - 1600));
-            if (ix < 0)   ix = 0;
-            if (ix > 27)  ix = 27;
-            int iy =      ((yret - 450) * 28) / (3400 - 450);
-            if (iy < 0)   iy = 0;
-            if (iy > 27)  iy = 27;
-        
-            printf("%d, %d\t", ix, iy);
-        
-            // draw a 3×3 square centered at (ix,iy)
-            for (int dy = -1; dy <= 0; dy++) {
-                int y = iy + dy;
-                if (y < 0 || y >= 28) continue;
-                for (int dx = 0; dx <= 1; dx++) {
-                    int x = ix + dx;
-                    if (x < 0 || x >= 28) continue;
-                    img[y][x] = 1;
+        switch (app_state) {
+            case DRAWING:
+                if (draw_state == DRAW) {
+                    frame_ready = false;
+                    read_touchpad();
                 }
-            }
+                else if (draw_state == NODRAW) {
+                    frame_ready = true;
+                }
+                break;
+            case CLASSIFY:
+                cnn_run_if_frame_ready();
+                app_state = DRAWING;
+                break;
         }
-
-        printf("ARRAY\n");
-        for (int i = 0; i < 28; i++) {
-            for (int j = 0; j < 28; j++) {
-                printf("%d ", img[i][j]);
-            }
-            printf("\n");
-        }
-        printf("\n");
-        //sleep_ms(10000);
     }
 
 }
