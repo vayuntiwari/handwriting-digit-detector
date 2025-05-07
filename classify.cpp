@@ -1,5 +1,5 @@
 #include "tensorflow/lite/core/c/common.h"
-#include "digit_cnn_model.h"
+#include "digit_cnn_model_large.h"
 #include "tensorflow/lite/micro/micro_interpreter.h"
 #include "tensorflow/lite/micro/micro_log.h"
 #include "tensorflow/lite/micro/micro_mutable_op_resolver.h"
@@ -18,22 +18,10 @@ namespace {
     TfLiteTensor* output = nullptr;
     //int inference_count = 0;
     
-    constexpr int kTensorArenaSize = 60*1024;
+    constexpr int kTensorArenaSize = 30*1024;
     uint8_t tensor_arena[kTensorArenaSize];
 } 
 
-// static void copy_and_quantize() {
-//     const float s   = input->params.scale;
-//     const int   zp  = input->params.zero_point;
-
-//     uint8_t local[28*28];
-//     for (int y = 0; y<28; ++y)
-//         for (int x = 0; x < 28; ++x)
-//             local[y*28 + x] = img[y][x];
-
-//     for (int i = 0; i < 28*28; ++i)
-//         input->data.int8[i] = (int8_t)((local[i] / 255))
-// }
 
 extern "C" {
 void cnn_setup() {
@@ -98,14 +86,26 @@ void cnn_run_if_frame_ready() {
         return;
     }
 
-    int best = 0;
-    int8_t best_val = -128;
+    // int best = 0;
+    // int8_t best_val = -128;
+    // for (int i = 0; i < 10; ++i) {
+    //     int8_t v = output->data.int8[i];
+    //     MicroPrintf("prob of %d: %d", i, v);
+    //     if (v > best_val) { best_val = v; best = i; }
+    // }
+
+    // MicroPrintf("Predicted digit: %d", best);
+
+    float probs[10];
     for (int i = 0; i < 10; ++i) {
-        int8_t v = output->data.int8[i];
-        MicroPrintf("prob of %d: %d", i, v);
-        //if (v > best_val) { best_val = v; best = i; }
+        int8_t q = output->data.int8[i];
+        probs[i] = (q - output->params.zero_point) * output->params.scale;
+        MicroPrintf("p[%d] = %f", i, probs[i]);   // prints 0-1 range
     }
 
-    //MicroPrintf("Predicted digit: %d", best);
+    int best = 0;
+    for (int i = 1; i < 10; ++i)
+        if (abs(output->data.int8[i]) > abs(output->data.int8[best])) best = i;
+    MicroPrintf("Predicted digit: %d", best);
 }
 }

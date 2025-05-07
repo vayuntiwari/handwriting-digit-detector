@@ -30,7 +30,7 @@
 #define YMINUS 9
 #define STATE_BUTTON 15
 #define DRAW_BUTTON 14
-#define BUTTON_COOLDOWN 20000
+#define BUTTON_COOLDOWN 100000
 
 // Setup for reading the y coordinate
 // Y+ and Y- set to input (high impedance)
@@ -68,6 +68,7 @@ void setupX(void) {
 
 volatile uint8_t img[28][28] = {0};
 volatile bool    frame_ready = false;    
+volatile bool    clear_img = false;
 
 // Selects between measuring x/y coord
 volatile int chooser;
@@ -121,49 +122,6 @@ static void button_irq_handler(uint gpio, uint32_t events)
     }
 }
 
-
-// uint32_t last_app_button_time = 0;
-// uint32_t last_draw_button_time = 0;
-
-// bool debounce_app_state_button() {
-//     if (gpio_get(STATE_BUTTON) == 0) {  
-//       uint32_t current_time = time_us_32();
-//       if (current_time - last_app_button_time > BUTTON_COOLDOWN*5){
-//         if (gpio_get(STATE_BUTTON) == 0) {  
-//           last_app_button_time = current_time;
-//           return true;
-//         }
-//       }
-//     }
-//     return false;
-// }
-  
-// //Function to update the state machine
-// void update_app_state() {
-//     if (debounce_app_state_button()) {
-//         app_state = (app_state == DRAWING) ? CLASSIFY : DRAWING;
-//     }
-// }
-
-// bool debounce_draw_state_button() {
-//     if (gpio_get(DRAW_BUTTON) == 0) {  
-//       uint32_t current_time = time_us_32();
-//       if (current_time - last_draw_button_time > BUTTON_COOLDOWN*5){
-//         if (gpio_get(DRAW_BUTTON) == 0) {  
-//           last_draw_button_time = current_time;
-//           return true;
-//         }
-//       }
-//     }
-//     return false;
-// }
-
-// void update_draw_state() {
-//     if (debounce_draw_state_button()) {
-//         draw_state = (draw_state == NODRAW) ? DRAW : NODRAW;
-//     }
-// }
-
 // Timer ISR
 bool repeating_timer_callback(struct repeating_timer *t) {
     // Read X coord
@@ -216,39 +174,107 @@ bool repeating_timer_callback(struct repeating_timer *t) {
     }
 }
 
-void read_touchpad() {
-    if ((xret < 2200) && (xret > 1600) && (yret < 3400) && (yret > 450)) {
-        // map into [0..27]
-        int ix = 28 - (((xret - 1600) * 28) / (2200 - 1600));
-        if (ix < 0)   ix = 0;
-        if (ix > 27)  ix = 27;
-        int iy =      ((yret - 450) * 28) / (3400 - 450);
-        if (iy < 0)   iy = 0;
-        if (iy > 27)  iy = 27;
+void clear_touchpad() {
+    if (clear_img) {
+        for (size_t y = 0; y < 28; ++y) {
+            for (size_t x = 0; x < 28; ++x) {
+                img[y][x] = 0;
+            }
+        }
+        clear_img = false;
+    }
+}
+
+// void read_touchpad() {
+//     if ((xret < 2200) && (xret > 1600) && (yret < 3400) && (yret > 450)) {
+//         // map into [0..27]
+//         int ix = 28 - (((xret - 1600) * 28) / (2200 - 1600));
+//         if (ix < 0)   ix = 0;
+//         if (ix > 27)  ix = 27;
+//         int iy =      ((yret - 450) * 28) / (3400 - 450);
+//         if (iy < 0)   iy = 0;
+//         if (iy > 27)  iy = 27;
     
+//         printf("%d, %d\t", ix, iy);
+    
+//         // draw a 2x2 square centered at (ix,iy)
+//         for (int dy = 0; dy <= 1; dy++) {
+//             int y = iy + dy;
+//             if (y < 0 || y >= 28) continue;
+//             for (int dx = 0; dx <= 1; dx++) {
+//                 int x = ix + dx;
+//                 if (x < 0 || x >= 28) continue;
+//                 if (dx == 0 && dy == 0) { img[y][x] = 255; } 
+//                 else if (img[y][x] != 255) { img[y][x] = 255; }
+//             }
+//         }
+//     }
+//     printf("ARRAY\n");
+//     for (int i = 0; i < 28; i++) {
+//         for (int j = 0; j < 28; j++) {
+//             printf("%d ", img[i][j]);
+//         }
+//         printf("\n");
+//     }
+//     printf("\n");
+// }
+
+/* assumes img[28][28] is global or passed in */
+/* 90° CW: (orig_x, orig_y)  →  (new_x = 27‑orig_y , new_y = orig_x) */
+
+#define N 28       // side length of the image
+
+#define N 28        // image side length
+
+void read_touchpad(void)
+{
+    if ((xret < 2200) && (xret > 1600) &&
+        (yret < 3400) && (yret > 450))
+    {
+        /* map raw touch into 0‥27 */
+        int ix = 28 - (((xret - 1600) * N) / (2200 - 1600));
+        if (ix < 0) ix = 0;
+        if (ix > 27) ix = 27;
+
+        int iy =     ((yret - 450) * N) / (3400 - 450);
+        if (iy < 0) iy = 0;
+        if (iy > 27) iy = 27;
+
         printf("%d, %d\t", ix, iy);
-    
-        // draw a 2x2 square centered at (ix,iy)
-        for (int dy = 0; dy <= 1; dy++) {
-            int y = iy + dy;
-            if (y < 0 || y >= 28) continue;
-            for (int dx = 0; dx <= 1; dx++) {
-                int x = ix + dx;
-                if (x < 0 || x >= 28) continue;
-                if (dx == 0 && dy == 0) { img[y][x] = 255; } 
-                else if (img[y][x] != 255) { img[y][x] = 255; }
+
+        /* draw a 2×2 square — store it already rotated 90° CW */
+        for (int dy = -1; dy <= 1; ++dy) {
+            int y_orig = iy + dy;             // original Y
+            if (y_orig >= N) continue;
+
+            for (int dx = -1; dx <= 1; ++dx) {
+                int x_orig = ix + dx;         // original X
+                if (x_orig >= N) continue;
+
+                /* correct clockwise mapping */
+                int y_rot = N - 1 - x_orig;   // row index in img
+                int x_rot = y_orig;           // column index in img
+
+                if (dx == 0 && dy == 0) {
+                    img[y_rot][x_rot] = 255;
+                } else if (img[y_rot][x_rot] != 255) {
+                    img[y_rot][x_rot] = 127;
+                }
             }
         }
     }
-    printf("ARRAY\n");
-    for (int i = 0; i < 28; i++) {
-        for (int j = 0; j < 28; j++) {
+
+    /* debug dump */
+    printf("ARRAY (90° CW)\n");
+    for (int i = 0; i < N; ++i) {
+        for (int j = 0; j < N; ++j) {
             printf("%d ", img[i][j]);
         }
         printf("\n");
     }
     printf("\n");
 }
+
 
 
 int main() {
@@ -297,11 +323,13 @@ int main() {
         switch (app_state) {
             case DRAWING:
                 if (draw_state == DRAW) {
+                    clear_touchpad();
                     frame_ready = false;
                     read_touchpad();
                 }
                 else if (draw_state == NODRAW) {
                     frame_ready = true;
+                    clear_img = true;
                 }
                 break;
             case CLASSIFY:
@@ -312,3 +340,47 @@ int main() {
     }
 
 }
+
+
+
+// uint32_t last_app_button_time = 0;
+// uint32_t last_draw_button_time = 0;
+
+// bool debounce_app_state_button() {
+//     if (gpio_get(STATE_BUTTON) == 0) {  
+//       uint32_t current_time = time_us_32();
+//       if (current_time - last_app_button_time > BUTTON_COOLDOWN*5){
+//         if (gpio_get(STATE_BUTTON) == 0) {  
+//           last_app_button_time = current_time;
+//           return true;
+//         }
+//       }
+//     }
+//     return false;
+// }
+  
+// //Function to update the state machine
+// void update_app_state() {
+//     if (debounce_app_state_button()) {
+//         app_state = (app_state == DRAWING) ? CLASSIFY : DRAWING;
+//     }
+// }
+
+// bool debounce_draw_state_button() {
+//     if (gpio_get(DRAW_BUTTON) == 0) {  
+//       uint32_t current_time = time_us_32();
+//       if (current_time - last_draw_button_time > BUTTON_COOLDOWN*5){
+//         if (gpio_get(DRAW_BUTTON) == 0) {  
+//           last_draw_button_time = current_time;
+//           return true;
+//         }
+//       }
+//     }
+//     return false;
+// }
+
+// void update_draw_state() {
+//     if (debounce_draw_state_button()) {
+//         draw_state = (draw_state == NODRAW) ? DRAW : NODRAW;
+//     }
+// }
