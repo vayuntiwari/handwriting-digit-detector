@@ -18,35 +18,157 @@
             padding: 2rem;
             box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
         }
+        .image-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        ol {
+            padding-left: 1.5rem;
+        }
+        .code-block {
+            display: inline-block;
+            background-color: #3c3c3c;
+            color: #e6e6e6;
+            padding: 1px 4px;
+            border-radius: 3px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .list-item {
+            margin-bottom: 1rem;
+        }
+        .nested-list {
+            padding-left: 1.5rem;
+        }
+        .steps-list {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        .steps-list li {
+            margin-bottom: 1rem;
+            padding-left: 1.5rem;
+            text-indent: -1.5rem;
+        }
+        .steps-list li::before {
+            content: "•";
+            color: #00bfff;
+            font-weight: bold;
+            display: inline-block;
+            width: 1.5rem;
+        }
     </style>
 </head>
 <body>
 
 <div class="container">
     <h1>Handwriting Digit Detector</h1>
-    <p>A memory-optimized CNN running on the RP2040 microcontroller that classifies handwritten digits 
-    drawn on a resistive touchscreen, showcasing real-time inference despite stringent memory constraints.</p>
+    <p>This project experiments with implementing various deep learning algorithms on the RP2040, testing the 
+    proficiency of these algorithms by means of a hand-written digit detector. </p>
 
     <h2>Introduction</h2>
-    <p>Over the course of the semester, we found Lab 2: Digital Galton Board to be the most compelling project. 
-    This lab pushed the memory limits of the RP2040 by requiring extensive optimization to fit a complex physics 
-    simulation within the microcontroller’s limited RAM memory. Reducing memory usage by , we managed to incorporate 
-    as many simulated balls as possible, optimizing both data structures and code implementation. This experience 
-    inspired us to further explore the RP2040’s capabilities under stringent memory constraints, leading to the idea 
-    of implementing TinyML on the same hardware platform. Given that machine learning models are traditionally 
-    memory-intensive, we aimed to investigate how effectively we could fit a functional CNN onto the RP2040 while 
-    maintaining real-time inference performance. This challenge of pushing the RP2040’s limits formed the core 
-    motivation for our final project.
-    </p>
     <p>The core of this project revolves around deploying a Convolutional Neural Network (CNN) on the RP2040 
     microcontroller to classify handwritten digits. The CNN is structured with quantized 8-bit integer weights 
     and activations to fit within the limited RAM of the RP2040 while maintaining a reasonable inference speed. 
     Input data is collected via a resistive touchscreen, which functions as a crude drawing interface. The touchscreen 
     readings are processed and mapped into a 28x28 pixel grid, which serves as input to the CNN. After classification, 
     the predicted digit is displayed on an OLED screen, providing immediate feedback to the user.</p>
+    <p>upload video to youtube & embed</p>
 
     <h2>High Level Design</h2>
-    <p>Explain your methodology here...</p>
+    <h3>Rationale</h3>
+    <p>Over the course of the semester, we found Lab 2: Digital Galton Board to be the most compelling project. 
+    This lab pushed the memory limits of the RP2040 by requiring extensive optimization to fit a complex physics 
+    simulation within the microcontroller’s limited RAM memory. We managed to incorporate 
+    as many simulated balls as possible, optimizing both data structures and code implementation. This experience 
+    inspired us to further explore the RP2040’s capabilities under stringent memory constraints, leading to the idea 
+    of implementing TinyML on the same hardware platform. Given that machine learning models are traditionally 
+    memory-intensive, we aimed to investigate how effectively we could fit a functional CNN onto the RP2040 while 
+    maintaining real-time inference performance. This challenge of pushing the RP2040’s limits formed the core 
+    motivation for our final project.</p>
+
+    <h3>Background</h3>
+
+    <h4>Resistive Touchpad</h4>
+    <p>The input to the CNN is taken in from a <a href="https://www.adafruit.com/product/333">resistive touchpad</a>.
+    A resistive touchpad operates based on the principles of a voltage divider network formed by two conductive layers 
+    separated by a small gap. When a user applies pressure to the touchpad surface, the two conductive layers make contact, 
+    creating a variable resistor network. By selectively configuring certain pins as inputs and outputs, we can effectively 
+    measure the X and Y coordinates of the touch event.</p>
+
+    <div class="image-container">
+        <img src="images/IMG_8380.jpg" alt="Handwriting Detector Output" width="600">
+    </div>
+
+    <p>In this project, we began by using a baseline demo code provided by Professor Hunter Adams, which was designed to map 
+    the touchpad readings to VGA output. This code serves as a foundational structure for our data acquisition process.</p>
+
+    <p>The resistive touchpad consists of four terminals: <strong>X+, X-, Y+, Y-</strong>. To accurately read both X and Y coordinates, we 
+    alternate between two pin configurations:</p>
+
+    <ol>
+        <li class="list-item"><strong>Reading the Y Coordinate:</strong>
+            <ul class="nested-list">
+                <li>The X+ and X- pins are configured as outputs, set to <span class="code-block">HIGH</span> and <span class="code-block">LOW</span> respectively, forming a voltage divider network along the X-axis.</li>
+                <li>The Y+ and Y- pins are configured as inputs, allowing the ADC to sample the Y-axis voltage based on the current X-axis configuration.</li>
+            </ul>
+        </li>
+
+        <li class="list-item"><strong>Reading the X Coordinate:</strong>
+            <ul class="nested-list">
+                <li>The Y+ and Y- pins are configured as outputs, set to <span class="code-block">HIGH</span> and <span class="code-block">LOW</span> respectively, forming a voltage divider network along the Y-axis.</li>
+                <li>The X+ and X- pins are configured as inputs, allowing the ADC to sample the X-axis voltage based on the current Y-axis configuration.</li>
+            </ul>
+        </li>
+    </ol>
+
+    <div class="image-container">
+        <img src="images/IMG_2006.jpg" alt="Handwriting Detector Output" width="400">
+    </div>
+
+    <p>The RP2040’s ADC module is a 12-bit successive approximation ADC that reads voltages 
+    ranging from 0V to 3.3V and converts them to a 12-bit integer value. In our implementation, 
+    we read the X and Y voltages by configuring the ADC to sample from GPIO pins <span class="code-block">GP26: ADC0</span> and <span class="code-block">GP27: ADC1</span>.
+    To mitigate noise and provide a more stable reading, a simple low-pass filter is implemented 
+    using a 16-sample buffer. The raw ADC readings for each axis are accumulated and averaged to provide a smoothed output. This averaging is extremely important for stabilizing 
+    the output values, given that the resistive touchpad readings fluctuate due to contact resistance variability. The details and challenges of our resistive touchpad implementation are expanded upon in Hardware Design.</p>
+
+    <p>To constantly sample the current position on the resistive touchpad, a timer interrupt service routine (ISR) runs at a fixed 250Hz frequency, toggling between the X and Y measurement modes. 
+        This sampling rate was specifically chosen to ensure that X and Y readings were not coupled, while also allowing
+        rapid touch events to be accurately captured and processed.
+        The ISR performs the following steps:</p>
+ 
+        <ul class="nested-list">
+            <li>Switch to the next measurement mode (X or Y).</li>
+        <li>Read the ADC value for the current axis.</li>
+        <li>Update the 16-sample buffer.</li>
+        <li>Compute the average value and store it as the current coordinate reading.</li>
+    </ul>
+
+    <p>This methodology effectively decouples the sampling process from the main application logic, allowing the touchpad data acquisition to run independently without 
+    blocking the primary control loop. This ensures that even during classification or display operations, the touchpad data acquisition continues uninterrupted, maintaining 
+    consistent data availability. The final scaled X, Y values are mapped to a 28x28 grid, serving as input data to the CNN model.</p>
+
+    <h4>Convolutional Neural Network</h4>
+    <table>
+        <tr>
+          <th>Company</th>
+          <th>Contact</th>
+          <th>Country</th>
+        </tr>
+        <tr>
+          <td>Alfreds Futterkiste</td>
+          <td>Maria Anders</td>
+          <td>Germany</td>
+        </tr>
+        <tr>
+          <td>Centro comercial Moctezuma</td>
+          <td>Francisco Chang</td>
+          <td>Mexico</td>
+        </tr>
+      </table>
+
+    <h4>RP2040 Memory</h4>
 
     <h2>Program Design</h2>
     <p>Present your results here...</p>
