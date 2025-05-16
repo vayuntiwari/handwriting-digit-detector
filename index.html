@@ -23,9 +23,27 @@
 <body>
 
 <div class="container">
-    <h1>Handwriting Digit Detector - Project Report</h1>
+    <h1>Handwriting Digit Detector</h1>
+    <p>A memory-optimized CNN running on the RP2040 microcontroller that classifies handwritten digits 
+    drawn on a resistive touchscreen, showcasing real-time inference despite stringent memory constraints.</p>
+
     <h2>Introduction</h2>
-    <p>Write your introduction here...</p>
+    <p>Over the course of the semester, we found Lab 2: Digital Galton Board to be the most compelling project. 
+    This lab pushed the memory limits of the RP2040 by requiring extensive optimization to fit a complex physics 
+    simulation within the microcontroller’s limited RAM memory. Reducing memory usage by , we managed to incorporate 
+    as many simulated balls as possible, optimizing both data structures and code implementation. This experience 
+    inspired us to further explore the RP2040’s capabilities under stringent memory constraints, leading to the idea 
+    of implementing TinyML on the same hardware platform. Given that machine learning models are traditionally 
+    memory-intensive, we aimed to investigate how effectively we could fit a functional CNN onto the RP2040 while 
+    maintaining real-time inference performance. This challenge of pushing the RP2040’s limits formed the core 
+    motivation for our final project.
+    </p>
+    <p>The core of this project revolves around deploying a Convolutional Neural Network (CNN) on the RP2040 
+    microcontroller to classify handwritten digits. The CNN is structured with quantized 8-bit integer weights 
+    and activations to fit within the limited RAM of the RP2040 while maintaining a reasonable inference speed. 
+    Input data is collected via a resistive touchscreen, which functions as a crude drawing interface. The touchscreen 
+    readings are processed and mapped into a 28x28 pixel grid, which serves as input to the CNN. After classification, 
+    the predicted digit is displayed on an OLED screen, providing immediate feedback to the user.</p>
 
     <h2>High Level Design</h2>
     <p>Explain your methodology here...</p>
