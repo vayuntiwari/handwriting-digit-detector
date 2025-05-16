@@ -58,8 +58,9 @@
             width: 1.5rem;
         }
         .clean-table {
-            width: 100%;
+            width: 80%;
             border-collapse: collapse;
+            margin: 0 auto;
             margin-bottom: 1rem;
         }
         .clean-table th, .clean-table td {
@@ -178,32 +179,67 @@
     <p>Since the CNN expects a 4D tensor input <span class="code-block">(batch_size, height, width, channels)</span>, the images were reshaped to include a single channel dimension to indicate that the images are grayscale.</p>
 
     <p><strong>Model Architecture:</strong> The model consists of a series of convolutional and max-pooling layers to extract spatial features from the 28x28 input images. The initial convolutional layers utilize small 3x3 kernels to capture fine-grained edge 
-    and texture information, followed by max-pooling to reduce spatial dimensions and retain key features.
+    and texture information, followed by max-pooling to reduce spatial dimensions and retain key features. A fully connected dense layer aggregates the extracted features, and a final dense layer with softmax activation outputs the classification probabilities 
+    for each of the ten digit classes.
 
     <table class="clean-table">
         <tr>
-            <td>conv2d</td>
-            <td>(3 × 3, 8 filters) - Learns local edge / texture detectors through parameter sharing. 
-                In convolution, this gives O(k² · in · out) weights instead of O(H · W · in · out).
-            </td>
-            <td>26 × 26 × 8</td>
+            <colgroup>
+                <col style="width: 20%;">
+                <col style="width: 50%;">
+                <col style="width: 15%;">
+                <col style="width: 15%;">
+            </colgroup>
         </tr>
         <tr>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td style="text-align: center;"><strong>Layer</strong></td>
+            <td style="text-align: center;"><strong>Function</strong></td>
+            <td style="text-align: center;"><strong>Input Shape</strong></td>
+            <td style="text-align: center;"><strong>Output Shape</strong></td>
         </tr>
         <tr>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td>Conv2D</td>
+            <td>Extracts low-level features (edges, corners). Helps identify basic shapes in the digit input.</td>
+            <td>(1, 28, 28, 1)</td>
+            <td>(1, 26, 26, 8)</td>
         </tr>
         <tr>
-            <td></td>
-            <td></td>
-            <td></td>
+            <td>MaxPooling2D</td>
+            <td>Reduces spatial dimensions, downsampling to keep the RP2040’s RAM use low. Provides translation invariance, important for touchscreen inputs.</td>
+            <td>(1, 26, 26, 8)</td>
+            <td>(1, 13, 13, 8)</td>
         </tr>
-    </table>
+        <tr>
+            <td>Conv2D</td>
+            <td>Extracts higher-level features. Adds additional filters to detect more complex patterns in the digit strokes.</td>
+            <td>(1, 13, 13, 8)</td>
+            <td>(1, 11, 11, 16)</td>
+        </tr>
+        <tr>
+            <td>MaxPooling2D</td>
+            <td>Further reduces spatial dimensions and enhances robustness to spatial variations.</td>
+            <td>(1, 11, 11, 16)</td>
+            <td>(1, 5, 5, 16)</td>
+        </tr>
+        <tr>
+            <td>Flatten</td>
+            <td>Converts 3D feature maps to a 1D vector for the dense layers. Prepares data for classification.</td>
+            <td>(1, 5, 5, 16)</td>
+            <td>(1, 400)</td>
+        </tr>
+        <tr>
+            <td>Dense</td>
+            <td>Fully connected layer that aggregates spatial features into meaningful patterns for classification. ReLU keeps activations sparse, lowering MAC count during inference.</td>
+            <td>(1, 400)</td>
+            <td>(1, 64)</td>
+        </tr>
+        <tr>
+            <td>Dense</td>
+            <td>Output layer with softmax activation, providing classification probabilities for each digit (0-9).</td>
+            <td>(1, 64)</td>
+            <td>(1, 10)</td>
+        </tr>
+    </table>    
 
     <h4>RP2040 Memory</h4>
 
