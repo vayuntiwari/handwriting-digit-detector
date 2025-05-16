@@ -10,6 +10,7 @@ extern volatile uint8_t img[28][28];
 
 extern volatile bool    frame_ready;
 
+
 static inline void ImageFrameDone(void) { frame_ready = true; }
 
 #ifdef __cplusplus

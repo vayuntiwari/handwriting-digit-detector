@@ -14,6 +14,12 @@
 
 int best = 0;
 
+int second_best = -1; 
+int nonzero_classifiers = 0; 
+bool error_threshold_reached = 0; 
+
+#define THRESHOLD 0.2f 
+
 namespace {
     const tflite::Model* model = nullptr;
     tflite::MicroInterpreter* interpreter = nullptr;
@@ -107,12 +113,30 @@ void cnn_run_if_frame_ready() {
     }
 
     best = 0;
-    for (int i = 1; i < 10; ++i)
-        if (abs(output->data.int8[i]) > abs(output->data.int8[best])) best = i;
+    error_threshold_reached = 0; 
+    second_best         = -1;
+    nonzero_classifiers = 0;
+    for (int i = 1; i < 10; ++i){
+        int temp = abs(output->data.int8[i]);
+        if (temp > 0) nonzero_classifiers++;
+        int best_val = abs(output->data.int8[best]);
+        if (temp > best_val) {
+            second_best = best;
+            best = i;
+        } else if (second_best == -1 || temp > abs(output->data.int8[second_best])) {
+            second_best = i;
+        }
+    }
     MicroPrintf("Predicted digit: %d", best);
+    //error_threshold_reached = ( ((abs(output->data.int8[best]) - abs(output->data.int8[second_best])) < THRESHOLD) || (nonzero_classifiers >= 3) ) ;
+    error_threshold_reached = (nonzero_classifiers >= 5);
 }
 }
 
 int return_digit(){
     return best; 
+}
+
+bool return_error(){
+    return error_threshold_reached; 
 }
