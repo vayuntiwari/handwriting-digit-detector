@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Handwriting Digit Detector Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -108,7 +109,7 @@
     <h3>Background</h3>
 
     <h3>Resistive Touchpad</h3>
-    <p>The input to the CNN is taken in from a <a href="https://www.adafruit.com/product/333">resistive touchpad</a>.
+    <p>The input to the CNN is taken in from a resistive touchpad.
     A resistive touchpad operates based on the principles of a voltage divider network formed by two conductive layers 
     separated by a small gap. When a user applies pressure to the touchpad surface, the two conductive layers make contact, 
     creating a variable resistor network. By selectively configuring certain pins as inputs and outputs, we can effectively 
@@ -239,21 +240,165 @@
             <td>(1, 64)</td>
             <td>(1, 10)</td>
         </tr>
-    </table>    
+    </table>
+    <p><strong>Before quantization, the total model occupies 107.6 KB of memory.</strong></p>
 
-    <h4>RP2040 Memory</h4>
+    <p><strong>Training and Evaluation:</strong> The model was compiled using the Adam optimizer and trained for 5 epochs using a sparse categorical cross-entropy loss function.
+        The training accuracy improved steadily across epochs, achieving a final accuracy of approximately 98.9% on the test dataset.</p>
+
+    <p><strong>Quantization and TFLite:</strong> After training, the model was converted to TensorFlow Lite format for deployment on the RP2040. The conversion included full integer quantization to reduce <strong>model size and memory footprint to 56 KB.</strong></p>
+
+    <p> The choice of model architecture, along with how it interfaces with the RP2040 is further explained in Software Design.</p>
+
+    <h3>Logical Structure</h3>
+    <p>The system is structured as a three-stage pipeline consisting of data acquisition, processing, and inference.</p>
+    
+        <ol>
+            <li class="list-item"><strong>Data Acquisition:</strong> The resistive touchscreen is sampled at a fixed frequency using a timer ISR. The ISR captures X and Y coordinates alternately, filters the data using a 16-sample averaging buffer, and maps the coordinates to a 28x28 pixel grid.</li>
+            <li class="list-item"><strong>Data Processing:</strong> The pixel grid is preprocessed to ensure consistency in scaling and orientation. Preprocessing also involves padding the drawn image with grey pixels to create a thicker stroke for better edge detection. The 28x28 grid is then fed to the CNN.</li>
+            <li class="list-item"><strong>Inference:</strong> The CNN processes the input data and outputs a probability vector of ten values, each representing a predicted digit (0-9). The highest probability class is selected and displayed on the OLED screen. Additionally, feedback is provided to the user through LED 
+            indicators and button-based controls.</li>
+        </ol>
+    
+    <h3>Software / Hardware Tradeoffs</h3>
+    <p>The primary hardware trade-off centered around the choice between a resistive touchpad and a more robust SPI-based touchscreen. The resistive touchpad was chosen due to its minimal software complexity and straightforward analog interfacing, leveraging the RP2040’s ADC for data acquisition. However, the resistive 
+        touchpad introduced noisy, inconsistent data that required substantial preprocessing and a deeper neural network to handle variability in input. In contrast, an SPI touchscreen would have provided cleaner data and potentially allowed for a simpler neural network, but at the cost of integrating large SPI drivers that 
+        could overwhelm the RP2040’s memory capacity. We had first planned to use a SPI touchscreen, specifically, the XPT2046, yet due to incompatabilities and difficulty setting up the SPI driver, we opted for the resistive touchpad, keeping the focus of the software on the CNN instead of sensors.</p>
+    <p>On the software side, we balanced model complexity against memory usage, opting for a compact CNN architecture with quantized 8-bit weights and activations. A deeper, more complex model could have potentially increased classification accuracy but would have exceeded the RP2040’s limited memory constraints. The model structures we experimented with, 
+    mainly consisted of two convolutional layers and two fully connected layers, and was optimized to fit within the available memory while still maintaining acceptable accuracy for handwritten digit classification. We experimented with convolution kernel sizes, number of filters, and different layers in between, such as max pooling. TensorFlow 
+    Lite Micro was employed for inference, allowing for memory-efficient tensor operations and integer quantization, further minimizing RAM usage.</p>
+
+    <h3>Existing IP considerations</h3>
+    <p>The machine learning framework (TensorFlow Lite Micro) and OLED library are public domain resources. Professor Hunter Adams' Resistive Touchscreen demo provided a foundational structure for touchscreen data acquisition.</p>
 
     <h2>Program Design</h2>
-    <p>Present your results here...</p>
-    <h3>Hardware Design</h3>
-    <p>Hardware Design</p>
+    <h3>Hardware</h3>
+    <h4>Components</h4>
+    <p>There are a few hardware components required for this project, including a touch screen, a display screen, and external buttons. The components and their datasheets are listed in the table below.</p>
+    <table class="clean-table">
+        <tr>
+            <colgroup>
+                <col style="width: 30%;">
+                <col style="width: 70%;">
+            </colgroup>
+        </tr>
+        <tr>
+            <td style="text-align: center;"><strong>Component</strong></td>
+            <td style="text-align: center;"><strong>Functionality</strong></td>
+        </tr>
+        <tr>
+            <td><a href="https://datasheets.raspberrypi.com/rp2040/rp2040-datasheet.pdf">Raspberry Pi Pico</a></td>
+            <td>Main microcontroller for project</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.adafruit.com/product/333">Resistive Touchscreen</a></td>
+            <td>Used for touch input</td>
+        </tr>
+        <tr>
+            <td><a href="https://universal-solder.ca/downloads/canaduino_oled_1.3_i2c.pdf">SSD1306 OLED Screen</a></td>
+            <td>Used to display classified numbers</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.seielect.com/catalog/sei-cf_cfm.pdf">1k Ω Resistors (2pcs)</a></td>
+            <td>Used to equalize touchpad resistance along X and Y</td>
+        </tr>
+        <tr>
+            <td><a href="https://www.we-online.com/components/products/datasheet/150080SS75000.pdf">LEDs (2pcs)</a></td>
+            <td>To indicate when classifying mode (green LED), or if error (red LED)</td>
+        </tr>
+        <tr>
+            <td><a href="https://api.pim.na.industrial.panasonic.com/file_stream/main/fileversion/245487">Buttons (3pcs)</a></td>
+            <td>Used to initiate classification from resistive touchpad input, clearing the OLED screen, and backspace one digit from the OLED screen</td>
+        </tr>
+        <tr>
+            <td>PCB (optional)</td>
+            <td>Provides easily portable project (schematic below)</td>
+        </tr>
+        <tr>
+            <td>Lithium Ion Battery (optional)</td>
+            <td>Allows project to be powered without the user's computer, increases portability</td>
+        </tr>
+    </table>
+    <div class="image-container">
+        <img src="images/" alt="High Level Block Diagram" width="700">
+    </div>
+    <h4>Details</h4>
+    <p><strong>Resistive Touchscreen:</strong> As stated above, we began by using a baseline demo code provided by Professor Hunter Adams, which was designed to map the touchpad readings to VGA output.
+    This demo served as a good basis to begin reading the touchscreen's voltage divider input, but we had a few challenges before we could read in a sensible input.</p>
+
+    <ol>
+        <li class="list-item"><strong>Different Resistance across X and Y axis of touchscreen:</strong> On the touchscreen's datasheet, it is noted that the Y axis has a resistance of 200 - 1000Ω, while the X axis has a resistance of 100-600Ω.
+        This makes sense, as the X dimension of the screen is shorter than the Y, but this low resistance would saturate the ADC value at 3.3V, no matter where on the screen we pressed. SCOPE ADC SATURATE IMAGE HERE.
+        Essentially, the issue is that to read the X position, we are driving Y with only the small, built-in X axis resistance, which is overloading the thin ITO film. In the worst case:
+        <div class="math-container">
+            <p>
+                $$ I = \frac{3.3V}{100\Omega} \approx 33mA $$
+            </p>
+        </div>
+        which is a huge current for a thin ITO film. It causes the touchscreen to behave like a short circuit across X+ and X- when pressed, so the ADC sees an immediate collapse to VDD instead of normal resistive divider behavior.</p>
+        <p>We decided the solution to this would be to add resistors in series between the Y+ and Y- pins of the touchscreen and their respective GPIOs. After iterative tuning, we settled on 1k Ω resistors in series for both paths. 
+        Now, when driving Y+ and Y- to read the X position, the current into the film is limited, a proper voltage divider is formed, and the ADC reads behave correctly.</p>
+        </li>
+        <li class="list-item"><strong>Capacitive Coupling:</strong> Physically, the X and Y sheets are separated by a thin insulator (~micron distance). When you drive Y (Y+ = 3.3V, Y- = 0V), and leave X floating, the floating X layer 
+        picks up voltage through capacitive coupling and resistive leakage. If X floats to some voltage, it modulates the local potential on the Y sheet where you are pressing, which is picked up by the ADC.
+        <p>To combat this issue, we had two fixes that both revolved around the speed of reading the ADC. First, we added two 'fake' ADC reads, </p></li>
+        <li class="list-item"><strong>Inference:</strong> The CNN processes the input data and outputs a probability vector of ten values, each representing a predicted digit (0-9). The highest probability class is selected and displayed on the OLED screen. Additionally, feedback is provided to the user through LED 
+        indicators and button-based controls.</li>
+    </ol>
+
     <h3>Software Design</h3>
+    <p>Software Design</p>
 
     <h2>Results of the Design</h2>
-    <p>Summarize your findings here...</p>
+    <p>We were able to successfully get the system to classify numbers 0-9, and display 7 digits (Cornell student ID) on the screen. </p>
+    <div class="image-container">
+        <img src="images/performancegraph.png" alt="Performance Graph" width="600">
+    </div>
+    
 
     <h2>Conclusions</h2>
     <p>Summarize your findings here...</p>
+
+    <h2>Conclusions</h2>
+    <p>Summarize your findings her...</p>
+
+    <h2>Appendices</h2>
+
+    <h3>Appendix A: Permissions</h3>
+    <p>The group approves this report for inclusion on the course website. The group approves the video for inclusion on the course youtube channel.</p>
+
+    <h3>Appendix B: Schematics</h3>
+    <p>Below is the schematic, layout, and 3D view of the PCB. A PCB was created with the intent to create a portable project and is not stricly necessary to complete this project.</p>
+
+    <div class="image-container">
+        <img src="images/schematic.jpg" alt="PCB schematic" width="600">
+    </div>
+    <div class="image-container">
+        <img src="images/layout.png" alt="Layout" width="600">
+    </div>
+    <div class="image-container">
+        <img src="images/3dview.png" alt="3D View" width="600">
+    </div>
+    <div class="image-container">
+        <img src="images/frontofboard.jpg" alt="Front of Board" width="600">
+    </div>
+    <div class="image-container">
+        <img src="images/backofboard.jpg" alt="Back of Board" width="600">
+    </div>
+
+    <h3>Appendix C: Work Division </h3>
+
+    <h3>Appendix D: References</h3>
+    <p>Datasheets are linked in table above.</p>
+    <a href="https://github.com/AminSahebi/OLED_SSH1106_I2C">OLED Library</a>
+    <br><br>
+    <a href="https://vanhunteradams.com/Pico/VGA/Trackpad.html">Resistive Touchpad Example</a>
+    <br><br>
+    <a href="https://github.com/raspberrypi/pico-tflmicro">Pico tflmicro Library</a>
+
+    
+
+
 </div>
 
 </body>
