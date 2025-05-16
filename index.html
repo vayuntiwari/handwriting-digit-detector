@@ -89,7 +89,7 @@
 
     <h3>Background</h3>
 
-    <h4>Resistive Touchpad</h4>
+    <h3>Resistive Touchpad</h3>
     <p>The input to the CNN is taken in from a <a href="https://www.adafruit.com/product/333">resistive touchpad</a>.
     A resistive touchpad operates based on the principles of a voltage divider network formed by two conductive layers 
     separated by a small gap. When a user applies pressure to the touchpad surface, the two conductive layers make contact, 
@@ -126,17 +126,17 @@
         <img src="images/IMG_2006.jpg" alt="Handwriting Detector Output" width="400">
     </div>
 
-    <p>The RP2040’s ADC module is a 12-bit successive approximation ADC that reads voltages 
+    <p><strong>Analog-Digital Converter:</strong> The RP2040’s ADC module is a 12-bit successive approximation ADC that reads voltages 
     ranging from 0V to 3.3V and converts them to a 12-bit integer value. In our implementation, 
     we read the X and Y voltages by configuring the ADC to sample from GPIO pins <span class="code-block">GP26: ADC0</span> and <span class="code-block">GP27: ADC1</span>.
     To mitigate noise and provide a more stable reading, a simple low-pass filter is implemented 
     using a 16-sample buffer. The raw ADC readings for each axis are accumulated and averaged to provide a smoothed output. This averaging is extremely important for stabilizing 
     the output values, given that the resistive touchpad readings fluctuate due to contact resistance variability. The details and challenges of our resistive touchpad implementation are expanded upon in Hardware Design.</p>
 
-    <p>To constantly sample the current position on the resistive touchpad, a timer interrupt service routine (ISR) runs at a fixed 250Hz frequency, toggling between the X and Y measurement modes. 
-        This sampling rate was specifically chosen to ensure that X and Y readings were not coupled, while also allowing
-        rapid touch events to be accurately captured and processed.
-        The ISR performs the following steps:</p>
+    <p><strong>Timer Interrupt Service Routine:</strong> To constantly sample the current position on the resistive touchpad, a timer interrupt service routine (ISR) runs at a fixed 250Hz frequency, toggling between the X and Y measurement modes. 
+    This sampling rate was specifically chosen to ensure that X and Y readings were not coupled, while also allowing
+    rapid touch events to be accurately captured and processed.
+    The ISR performs the following steps:</p>
  
         <ul class="nested-list">
             <li>Switch to the next measurement mode (X or Y).</li>
@@ -149,7 +149,16 @@
     blocking the primary control loop. This ensures that even during classification or display operations, the touchpad data acquisition continues uninterrupted, maintaining 
     consistent data availability. The final scaled X, Y values are mapped to a 28x28 grid, serving as input data to the CNN model.</p>
 
-    <h4>Convolutional Neural Network</h4>
+    <h3>Convolutional Neural Network</h3>
+    <p>The CNN model was developed and trained in Python using the TensorFlow library. The training dataset used was the MNIST dataset, a widely recognized dataset of 28x28 grayscale 
+    images representing handwritten digits ranging from 0 to 9. The goal was to train a lightweight, memory-efficient CNN model that could be quantized and deployed to the RP2040 microcontroller 
+    without exceeding its limited RAM capacity.</p>
+
+    <p><strong>Dataset Preperation:</strong> The dataset was loaded and normalized to have pixel values ranging from 0 to 1. This scaling step is crucial for stabilizing the training process and ensuring 
+    that the neural network can effectively learn patterns in the data.</p>
+
+
+
     <table>
         <tr>
           <th>Company</th>
